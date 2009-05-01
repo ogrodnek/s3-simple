@@ -15,3 +15,4 @@ BUT, I needed something super simple that would work with the restrictions aroun
 
 So, this is the base s3-shell code, with the fix mentioned in the comments, and the Base64 class stolen from another aws example (s3-shell previously used a com.sun class, which you can't do in AE)...
 
+The S3 support is pretty basic... No meta-data support.
