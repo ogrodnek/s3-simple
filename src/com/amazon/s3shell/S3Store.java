@@ -19,9 +19,12 @@ import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -226,13 +229,82 @@ public class S3Store {
      * @throws IllegalArgumentException If there is no bucket set
      * @throws IOException From underlying network problems or if S3 returned
      * an internal server error.
-     **/
+     **/       
     public boolean storeItem(final String id, final byte[] data) throws IOException {
+      return storeItem(id, data, (Map<String, List<String>>) null);
+    }
+
+    private void addAclHeader(final Map<String, List<String>> headers, final String acl) {
+      headers.put("x-amz-acl", Collections.singletonList(acl));
+    }
+    
+    /**
+     * Stores item data into S3.  No metadata headers are added.
+     *
+     * @param id The ID to store the item to [may not be null]
+     * @param data The binary data to store [may not be null]
+     * @param acl convenience param to specify an acl.  equivalent to including a header of "x-amz-acl" with this value.
+     * Must be one of public-read, public-write, authenticated-read, or private (the default).    See:
+     * http://docs.amazonwebservices.com/AmazonS3/latest/index.html?S3_ACLs.html for more info.
+     * @param headers other headers to send.  may be null or empty.  useful for setting content-type, acls, or other user
+     * meta-data.  see http://docs.amazonwebservices.com/AmazonS3/latest/index.html?UsingMetadata.html for more info.
+     * @return True if the operation succeeded, false if it failed.
+     * @throws IllegalArgumentException If there is no bucket set
+     * @throws IOException From underlying network problems or if S3 returned
+     * an internal server error.
+     **/    
+    public boolean storeItem(final String id, final byte[] data, final String acl) throws IOException {
+      final Map<String, List<String>> headers = new HashMap<String, List<String>>(1);
+      addAclHeader(headers, acl);
+      
+      return storeItem(id, data, headers);
+    }
+    
+    /**
+     * Stores item data into S3.  No metadata headers are added.
+     *
+     * @param id The ID to store the item to [may not be null]
+     * @param data The binary data to store [may not be null]
+     * @param acl convenience param to specify an acl.  equivalent to including a header of "x-amz-acl" with this value.
+     * Must be one of public-read, public-write, authenticated-read, or private (the default).  See:
+     * http://docs.amazonwebservices.com/AmazonS3/latest/index.html?S3_ACLs.html for more info.
+     * @param headers other headers to send.  may be null or empty.  useful for setting content-type, acls, or other user
+     * meta-data.  see http://docs.amazonwebservices.com/AmazonS3/latest/index.html?UsingMetadata.html for more info.
+     * @return True if the operation succeeded, false if it failed.
+     * @throws IllegalArgumentException If there is no bucket set
+     * @throws IOException From underlying network problems or if S3 returned
+     * an internal server error.
+     **/
+    public boolean storeItem(final String id, final byte[] data, final String acl, final Map<String, List<String>> _headers) throws IOException {
+      final Map<String, List<String>> headers = new HashMap<String, List<String>>();
+      
+      if (_headers != null) {
+        headers.putAll(_headers);
+      }
+      
+      addAclHeader(headers, acl);
+      
+      return storeItem(id, data, headers);
+    }
+
+    /**
+     * Stores item data into S3.  No metadata headers are added.
+     *
+     * @param id The ID to store the item to [may not be null]
+     * @param data The binary data to store [may not be null]
+     * @param headers other headers to send.  may be null or empty.  useful for setting content-type, acls, or other user
+     * meta-data.  see http://docs.amazonwebservices.com/AmazonS3/latest/index.html?UsingMetadata.html for more info.
+     * @return True if the operation succeeded, false if it failed.
+     * @throws IllegalArgumentException If there is no bucket set
+     * @throws IOException From underlying network problems or if S3 returned
+     * an internal server error.
+     **/
+      public boolean storeItem(final String id, final byte[] data, final Map<String, List<String>> headers) throws IOException {      
         if(id == null) throw new IllegalArgumentException("id may not be null");
         if(data == null) throw new IllegalArgumentException("data may not be null");
-
-        final HttpURLConnection itemConn = getItemURLConnection("PUT", id, data);
-
+        
+        final HttpURLConnection itemConn = getItemURLConnection("PUT", id, data, headers);
+        
         itemConn.setDoOutput(true);
 
         itemConn.connect();
@@ -256,7 +328,7 @@ public class S3Store {
     public byte[] getItem(final String id) throws IOException {
         if(id == null) throw new IllegalArgumentException("id may not be null");
 
-        final HttpURLConnection itemConn = getItemURLConnection("GET", id, null);
+        final HttpURLConnection itemConn = getItemURLConnection("GET", id, null, null);
 
         itemConn.connect();
 
@@ -288,7 +360,7 @@ public class S3Store {
     public boolean deleteItem(final String id) throws IOException {
         if(id == null) throw new IllegalArgumentException("id may not be null");
 
-        final HttpURLConnection itemConn = getItemURLConnection("DELETE", id, null);
+        final HttpURLConnection itemConn = getItemURLConnection("DELETE", id, null, null);
 
         itemConn.connect();
 
@@ -393,7 +465,7 @@ public class S3Store {
      * on success, false on non-recoverable failure, or throws an IOException
      * in cases where a retry might be reasonably expected to succeed.  When
      * this method returns false, it will also print an error message to
-     * System.err.
+     * the logger.
      **/
     private boolean checkResponse(final String operation, final HttpURLConnection conn) throws IOException {
         final int responseCode = conn.getResponseCode();
@@ -411,12 +483,9 @@ public class S3Store {
             throw new IOException(operation+": gateway timeout");
         }
         
-        ourLogger.log(Level.INFO, "" + responseCode);
-        ourLogger.log(Level.INFO, "" + conn.getResponseMessage());
-
         // 2xx response codes are ok, everything else is an error
         if(responseCode / 100 != 2) {
-            System.err.println(operation+": response code " + responseCode);
+          ourLogger.log(Level.SEVERE, String.format("%s: response code %d", operation, responseCode));
             printError(conn);
 
             return false;
@@ -428,7 +497,7 @@ public class S3Store {
     /**
      * If a connection to S3 returned an error response code, this method
      * will parse the error response XML and send the user-visible message
-     * to System.err
+     * to the logger as SEVERE.
      **/
     private void printError(final HttpURLConnection conn) throws IOException {
         final InputStream errorData = conn.getErrorStream();
@@ -451,7 +520,7 @@ public class S3Store {
         }
 
         for(String msg : olp.getList()) {
-            System.err.println(msg);
+          ourLogger.log(Level.SEVERE, msg);
         }
     }
 
@@ -526,7 +595,7 @@ public class S3Store {
      * Gets an HttpURLConnection referring to a specific item for storing
      * and retrieving of data.
      **/
-    private HttpURLConnection getItemURLConnection(final String method, final String id, final byte[] data) throws IOException {
+    private HttpURLConnection getItemURLConnection(final String method, final String id, final byte[] data, final Map<String, List<String>> headers) throws IOException {
         if(m_bucket == null) {
             throw new IllegalArgumentException("bucket is not set");
         }
@@ -536,10 +605,27 @@ public class S3Store {
         final HttpURLConnection urlConn = (HttpURLConnection)itemURL.openConnection();
         urlConn.setRequestMethod(method);
         urlConn.setReadTimeout(READ_TIMEOUT);
+        
+        if (headers != null) {
+          for (final Map.Entry<String, List<String>> me : headers.entrySet()) {
+            for (final String v : me.getValue()) {
+              urlConn.setRequestProperty(me.getKey(), v);
+            }
+          }
+        }
 
         addAuthorization(urlConn, method, data);
 
         return urlConn;
+    }
+    
+    public String getContentType(final HttpURLConnection conn) {
+      for (final Map.Entry<String, List<String>> me : conn.getRequestProperties().entrySet()) {
+        if ("Content-Type".equalsIgnoreCase(me.getKey())) {
+          return me.getValue().iterator().next();
+        }
+      }
+      return "";
     }
 
     /**
@@ -549,7 +635,7 @@ public class S3Store {
      * but the data itself is not written to the connection.
      **/
     private void addAuthorization(final HttpURLConnection conn, final String method, final byte[] data) throws IOException {
-        String contentType = "";
+      String contentType = getContentType(conn);
         // on these methods, the java.net classes will add this content type
         // automatically
 //        if(method.equalsIgnoreCase("GET") || method.equalsIgnoreCase("DELETE")) {
@@ -593,8 +679,15 @@ public class S3Store {
         buf.append(contentMD5).append("\n");
         buf.append(contentType).append("\n");
         buf.append(date).append("\n");
+        
+        final String headers = getHeaders(conn);
+        
+        if (headers.length() > 0) {
+          buf.append(headers);
+        }
+        
         buf.append(conn.getURL().getPath());
-
+        
         String auth;
         try {
             final SecretKeySpec signingKey = new SecretKeySpec(m_password.getBytes(), SIGNATURE_ALGORITHM);
@@ -611,6 +704,34 @@ public class S3Store {
         }
 
         conn.setRequestProperty("Authorization", "AWS "+m_username+":"+auth);
+    }
+    
+    private String getHeaders(final HttpURLConnection conn) {
+      final Map<String, List<String>> props = conn.getRequestProperties();
+      final List<String> keys = new ArrayList<String>(props.keySet());
+      Collections.sort(keys);
+      
+      final StringBuilder buf = new StringBuilder();
+      for (final String k : keys) {
+        if (k.toLowerCase().startsWith("x-amz-")) {
+          final List<String> vals = props.get(k);
+          
+          if (vals.size() > 0) {
+            buf.append(k.toLowerCase().trim());
+            buf.append(":");
+            
+            for (final String v : vals) {
+              buf.append(v.trim());
+              buf.append(",");
+            }
+            
+            buf.deleteCharAt(buf.length() -1);
+            buf.append("\n");
+          }
+        }
+      }
+      
+      return buf.toString();
     }
 
     /**
