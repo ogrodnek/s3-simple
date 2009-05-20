@@ -16,3 +16,24 @@ BUT, I needed something super simple that would work with the restrictions aroun
 So, this is the base s3-shell code, with the fix mentioned in the comments, and the Base64 class stolen from another aws example (s3-shell previously used a com.sun class, which you can't do in AE)...
 
 The S3 support is pretty basic... No meta-data support.
+
+=======
+
+Update: 5/20/09
+
+Added basic acl and header support.  Not 100% crazy about the API, but figured maybe the functionality would be useful to someone.
+
+Usage:
+
+S3Store s3 = new S3Store("s3.amazonaws.com", ACCESS_KEY, SECRET_KEY);
+s3.setBucket("my-bucket");
+
+// upload an item as public-read
+s3.storeItem("test", new String("hello").getBytes(), "public-read");
+
+// upload a js file, with a cache control-header
+final Map<String, List<String>> headers = new HashMap<String, List<String>>();
+headers.put("Cache-Control", Collections.singletonList("max-age=300, must-revalidate"));
+headers.put("Content-Type", Collections.singletonList("application/x-javascript"));
+
+s3.storeItem("test2.js", new String("document.write('hello');").getBytes(), "public-read", headers);
