@@ -314,6 +314,40 @@ public class S3Store {
 
         return checkResponse("storeItem", itemConn);
     }
+      
+      public boolean copyItem(final String fromKey, final String toKey, final String acl) 
+      throws IOException {
+        if (fromKey == null || toKey == null) {
+          throw new IllegalArgumentException("neither fromKey or toKey can be null");
+        }
+        
+        final Map<String, List<String>> headers = new HashMap<String, List<String>>(3);
+        
+        if (acl != null) {
+          addAclHeader(headers, acl);
+        }
+        
+        final String fullDst = String.format("%s/%s", this.m_bucket, fromKey);
+        
+        headers.put("x-amz-copy-source", Collections.singletonList(fullDst));
+        
+        final HttpURLConnection itemConn = getItemURLConnection("PUT", toKey, null, headers);
+        itemConn.connect();
+        
+        return checkResponse("copyItem", itemConn);
+      }
+      
+      public Map<String, List<String>> getMeta(final String key) throws IOException {
+        if (key == null) {
+          throw new IllegalArgumentException("key must not be null");
+        }
+        
+        final HttpURLConnection itemConn = getItemURLConnection("HEAD", key, null, null);
+        
+        if (! checkResponse("getMeta", itemConn)) return null;
+        
+        return itemConn.getHeaderFields();
+      }
 
     /**
      * Gets an item from the current bucket.
@@ -325,7 +359,7 @@ public class S3Store {
      * @throws IOException From underlying network problems or if S3 returned
      * an internal server error.
      **/
-    public byte[] getItem(final String id) throws IOException {
+      public S3Object getItemWithHeaders(final String id) throws IOException {
         if(id == null) throw new IllegalArgumentException("id may not be null");
 
         final HttpURLConnection itemConn = getItemURLConnection("GET", id, null, null);
@@ -344,9 +378,14 @@ public class S3Store {
         finally {
             datainput.close();
         }
-
-        return retval;
+        
+        return new S3Object(retval, itemConn.getHeaderFields());
     }
+      
+      public byte[] getItem(final String id) throws IOException {
+        final S3Object ret = getItemWithHeaders(id);
+        return (ret == null ? null : ret.getData());
+      }
 
     /**
      * Deletes an item from the current bucket.
