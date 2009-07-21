@@ -522,6 +522,10 @@ public class S3Store {
             throw new IOException(operation+": gateway timeout");
         }
         
+        if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
+        	return false;
+        }
+        
         // 2xx response codes are ok, everything else is an error
         if(responseCode / 100 != 2) {
           ourLogger.log(Level.SEVERE, String.format("%s: response code %d", operation, responseCode));
