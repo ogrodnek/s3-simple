@@ -2,7 +2,7 @@
 
 This project is a simple java library for connecting to Amazon S3.
 
-It's the s3-shell code taken from: <http://developer.amazonwebservices.com/connect/entry.jspa?externalID=138&categoryID=47>
+It's the s3-shell sample code from Amazon (no longer seems to be available from the AWS Sample code site).
 
 And a Java Base64 class taken from:
 <http://iharder.sourceforge.net/current/java/base64/>
